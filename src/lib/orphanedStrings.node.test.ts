@@ -25,17 +25,11 @@ test('findOrphanedStrings - hex encoded strings', () => {
   assert.deepStrictEqual(results, ['Hello World']);
 });
 
-test('findOrphanedStrings - escapes and printable filter', () => {
-  // The RegExp stringPattern `\(([^)]{4,200})\)` prevents `)` characters from being in the match.
-  // Because of this, it can't match `(Hello\nWorld\(1\)\\test)`. It stops at the first `)` which is inside `\(1\)`.
-  // The first matched segment will be `(Hello\nWorld\(1\)` -> decoded as `Hello\nWorld(1\`
-  // The pattern in findOrphanedStrings stops at the first `)` even if it is escaped.
-
-  // So the test should assert what the code ACTUALLY does, since our goal is testing the existing logic.
-  // We're just adding tests, not changing pdfForensics.ts logic.
-  const data = new TextEncoder().encode('(Hello\\nWorld\\(1\\)\\\\test)');
+test('findOrphanedStrings - decodes newline, tab, carriage return and backslash escapes', () => {
+  // Escaped closing parentheses remain an unsupported case in the bounded scanner.
+  const data = new TextEncoder().encode('(Hello\\nWorld\\tName\\rFolder\\\\File)');
   const results = findOrphanedStrings(data);
-  assert.deepStrictEqual(results, ['Hello\nWorld(1\\']);
+  assert.deepStrictEqual(results, ['Hello\nWorld\tName\rFolder\\File']);
 });
 
 test('findOrphanedStrings - printable ratio filter rejection', () => {
