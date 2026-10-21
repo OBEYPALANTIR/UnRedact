@@ -7,20 +7,22 @@ import type { VersionInfo, VersionDiff } from '../types';
  * contains recoverable previous versions (potentially before redaction).
  */
 export function detectIncrementalSaves(data: Uint8Array): VersionInfo {
-  const eofMarker = new TextEncoder().encode('%%EOF');
   const offsets: number[] = [];
+  const len = data.length;
+  // %%EOF is [37, 37, 69, 79, 70]
 
-  for (let i = 0; i <= data.length - eofMarker.length; i++) {
-    let match = true;
-    for (let j = 0; j < eofMarker.length; j++) {
-      if (data[i + j] !== eofMarker[j]) {
-        match = false;
-        break;
-      }
-    }
-    if (match) {
-      offsets.push(i + eofMarker.length);
-      i += eofMarker.length; // Skip past this marker
+  let i = data.indexOf(37);
+  while (i !== -1 && i <= len - 5) {
+    if (
+      data[i + 1] === 37 &&
+      data[i + 2] === 69 &&
+      data[i + 3] === 79 &&
+      data[i + 4] === 70
+    ) {
+      offsets.push(i + 5);
+      i = data.indexOf(37, i + 5);
+    } else {
+      i = data.indexOf(37, i + 1);
     }
   }
 
@@ -220,10 +222,16 @@ export function findOrphanedStrings(data: Uint8Array): string[] {
       .replace(/\\([()])/g, '$1');
 
     // Filter: must contain mostly printable ASCII/Unicode, min 4 chars
-    const printableRatio = (str.match(/[\x20-\x7E]/g) || []).length / str.length;
-    if (printableRatio > 0.7 && str.trim().length >= 4 && !seen.has(str.trim())) {
-      seen.add(str.trim());
-      results.push(str.trim());
+    let printableCount = 0;
+    for (let i = 0; i < str.length; i++) {
+      const code = str.charCodeAt(i);
+      if (code >= 32 && code <= 126) printableCount++;
+    }
+    const printableRatio = printableCount / str.length;
+    const trimmed = str.trim();
+    if (printableRatio > 0.7 && trimmed.length >= 4 && !seen.has(trimmed)) {
+      seen.add(trimmed);
+      results.push(trimmed);
     }
   }
 

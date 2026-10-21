@@ -1,4 +1,3 @@
-import { GoogleGenAI, Type } from '@google/genai';
 import { ShieldAlert } from 'lucide-react';
 import { motion } from 'motion/react';
 import React, { useState, useRef, useCallback } from 'react';
@@ -10,10 +9,6 @@ import { runForensicExtraction, buildForensicSummary, formatForensicReportForPro
 import { crossReferencePersons, formatCrossReferencesForPrompt, type CrossReferenceResult } from './lib/personsApi';
 import type { ForensicReport, ForensicSummary, HistoryItem, Redaction, Status } from './types';
 import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB, MAX_TEXT_LENGTH } from './types';
-
-// NOTE: The API key is injected at build time and visible in the client bundle.
-// For production, consider using a server-side proxy to protect the key.
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 export default function App() {
   const [status, setStatus] = useState<Status>('idle');
@@ -243,47 +238,34 @@ IMPORTANT RULES:
           }
         };
 
-        const response = await callWithRetry(() =>
-          ai.models.generateContent({
-            model: 'gemini-2.5-flash-preview-05-20',
-            contents: [
-              {
-                inlineData: {
-                  data: base64,
-                  mimeType: 'application/pdf',
-                },
-              },
-              { text: prompt },
-            ],
-            config: {
-              responseMimeType: 'application/json',
-              responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                  reconstructedText: { type: Type.STRING },
-                  redactions: {
-                    type: Type.ARRAY,
-                    items: {
-                      type: Type.OBJECT,
-                      properties: {
-                        type: { type: Type.STRING },
-                        text: { type: Type.STRING },
-                        score: { type: Type.NUMBER },
-                        method: { type: Type.STRING },
-                        alternatives: { type: Type.ARRAY, items: { type: Type.STRING } },
-                        explanation: { type: Type.STRING },
-                      },
-                    },
-                  },
-                },
-              },
+        const response = await callWithRetry(async () => {
+          const res = await fetch('/api/analyze', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
             },
-          })
-        );
+            body: JSON.stringify({ prompt, base64 }),
+          });
+
+          if (!res.ok) {
+            let errorMessage = `HTTP error! status: ${res.status}`;
+            try {
+              const errData = await res.json();
+              if (errData.error?.message) {
+                errorMessage = errData.error.message;
+              }
+            } catch {
+              // Ignore non-JSON errors
+            }
+            throw new Error(errorMessage);
+          }
+
+          return await res.json();
+        });
 
         if (cancelRef.current) return;
 
-        const resultData = JSON.parse(response.text || '{}');
+        const resultData = response || {};
         const resultText = resultData.reconstructedText || 'No text could be generated.';
         const resultRedactions: Redaction[] = resultData.redactions || [];
 
