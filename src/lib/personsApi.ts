@@ -45,7 +45,7 @@ const NAME_STOPLIST = new Set([
  */
 export function extractNames(text: string, maxNames = 15): string[] {
   const namePattern = /\b([A-Z][a-z]{1,20}(?:\s+[A-Z][a-z]{1,20}){1,2})\b/g;
-  const counts = new Map<string, number>();
+  const counts = new Map<string, { count: number }>();
 
   let match;
   while ((match = namePattern.exec(text)) !== null) {
@@ -53,19 +53,27 @@ export function extractNames(text: string, maxNames = 15): string[] {
     if (NAME_STOPLIST.has(name)) continue;
     // Skip single-word names that slipped through
     if (!name.includes(' ')) continue;
-    counts.set(name, (counts.get(name) || 0) + 1);
+
+    const obj = counts.get(name);
+    if (obj === undefined) {
+      counts.set(name, { count: 1 });
+    } else {
+      obj.count++;
+    }
   }
 
   // Sort by frequency, take top N
   return [...counts.entries()]
-    .sort((a, b) => b[1] - a[1])
+    .sort((a, b) => b[1].count - a[1].count)
     .slice(0, maxNames)
     .map(([name]) => name);
 }
 
-/**
- * Queries the Epstein Exposed persons API for a single name.
- */
+const queryCache = new Map<string, { expiresAt: number; result: PersonCrossReference }>();
+const CACHE_TTL_MS = 5 * 60_000;
+const CACHE_MAX_ENTRIES = 100;
+
+/** Cache completed requests only so each caller owns its cancellation signal. */
 async function queryPerson(
   name: string,
   apiBaseUrl: string,
@@ -73,6 +81,12 @@ async function queryPerson(
   signal?: AbortSignal
 ): Promise<PersonCrossReference> {
   const url = `${apiBaseUrl}/v2/persons?q=${encodeURIComponent(name)}&per_page=${perPage}`;
+  signal?.throwIfAborted();
+  const cached = queryCache.get(url);
+  if (cached && cached.expiresAt > Date.now()) {
+    return structuredClone(cached.result);
+  }
+  queryCache.delete(url);
   const response = await fetch(url, { signal });
 
   if (response.status === 429) {
@@ -97,7 +111,13 @@ async function queryPerson(
     url: item.url ?? undefined,
   }));
 
-  return { queryName: name, matches };
+  signal?.throwIfAborted();
+  const result = { queryName: name, matches };
+  if (queryCache.size >= CACHE_MAX_ENTRIES) {
+    queryCache.delete(queryCache.keys().next().value!);
+  }
+  queryCache.set(url, { expiresAt: Date.now() + CACHE_TTL_MS, result: structuredClone(result) });
+  return result;
 }
 
 /**
@@ -131,6 +151,10 @@ export async function crossReferencePersons(
   // Process in batches of 5
   const batchSize = 5;
   for (let i = 0; i < namesExtracted.length && !rateLimited; i += batchSize) {
+    if (signal?.aborted) {
+      errors.push('Cancelled');
+      break;
+    }
     const batch = namesExtracted.slice(i, i + batchSize);
     const results = await Promise.allSettled(
       batch.map((name) => queryPerson(name, apiBaseUrl, perPage, signal))

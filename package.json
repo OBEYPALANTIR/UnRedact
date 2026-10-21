@@ -3,14 +3,22 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "scripts": {
-    "dev": "vite --port=3000 --host=0.0.0.0",
+    "dev": "node server.js",
     "build": "vite build",
-    "preview": "vite preview",
+    "preview": "NODE_ENV=production node server.js",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "npm run test:unit && npm run test:dom && npm run test:server",
+    "test:unit": "node --import tsx --import ./test/setup.mjs --test src/lib/*.node.test.ts",
+    "test:dom": "vitest run",
+    "test:server": "node --test server.test.js"
   },
   "dependencies": {
+    "express": "^5.2.1",
     "@google/genai": "^1.29.0",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
@@ -24,6 +32,9 @@
     "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {
+    "@napi-rs/canvas": "0.1.96",
+    "jsdom": "29.0.1",
+    "vitest": "4.1.1",
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
     "tailwindcss": "^4.1.14",

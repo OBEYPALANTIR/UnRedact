@@ -18,7 +18,7 @@ View your app in AI Studio: https://ai.studio/apps/755aacd2-59b7-45c7-945f-f5360
 
 ## Run Locally
 
-**Prerequisites:**  Node.js
+**Prerequisites:** Node.js 22.13 or newer.
 
 
 1. Install dependencies:
@@ -26,3 +26,21 @@ View your app in AI Studio: https://ai.studio/apps/755aacd2-59b7-45c7-945f-f5360
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+
+Open http://127.0.0.1:3000. The server binds only to loopback and accepts
+same-origin local requests. The API key stays on the server and is never
+injected into the browser bundle. Do not expose this local server through a
+public proxy or tunnel; a hosted deployment needs authentication and per-user
+usage limits.
+
+Set `GEMINI_MODEL` on the server to choose a model available to your account.
+The default is `gemini-3.6-flash`, the replacement listed by Google for the
+retired preview previously used here:
+[Gemini model deprecations](https://ai.google.dev/gemini-api/docs/deprecations).
+Live model access and billing depend on your account.
+
+Analysis accepts PDFs up to 20 MB, permits one request at a time and ten per
+minute, and caps each response at 8,192 tokens. Run `npm run build` followed by
+`npm run preview` for the local production build.
+
+Run `npm test`, `npm run lint`, and `npm run build` to validate changes.
